@@ -22,23 +22,21 @@ Manager that automatically install/remove/update programs on Windows.
 
 ### Usage
 ```
-usage: appman.py [-h] [-v] [-d]
-                 {install,remove,update,list-available,list-installed}
-                 [programs [programs ...]]
-
 An application manager for Windows
 
 positional arguments:
-  {install,remove,update,list-available,list-installed}
-                        Action to perform, one of: install, remove, update,
-                        list-available, list-installed ("install" mode requires
-                        admin privileges)
-  programs              Space separated list of program names to
-                        install/update/remove (if mode is "update", you can
-                        use "all" to update all programs installed)
+  {install,remove,update,available,installed}
+                        Action to perform, one of:
+                        - install   -> install one/more not installed programs (requires admin privileges)
+                        - remove    -> remove one/more installed programs (requires admin privileges)
+                        - update    -> update one/more installed program
+                        - available -> list all available program profiles
+                        - installed -> list all installed programs
+  programs              Space separated list of program names (usable only if "mode" is install/update/remove).
+                        The keyword "all" can be used to update all programs installed.
 
 optional arguments:
   -h, --help            show this help message and exit
-  -v, --version         show program's version number and exit
+  -v, --version         Show program's author, version number and exit
   -d, --debug           Enable debug mode
 ```
