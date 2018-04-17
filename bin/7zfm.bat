@@ -12,7 +12,7 @@ REM but WITHOUT ANY WARRANTY; without even the implied warranty of
 REM MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 REM GNU General Public License for more details.
 REM You should have received a copy of the GNU General Public License
-REM along with this program.  If not, see <http://www.gnu.org/licenses/>.
+REM along with this program.  If not, see http://www.gnu.org/licenses/
 
 REM Run 7zip-embed GUI File Manager
 %~dp0\7zip-embed\7zfm %*
