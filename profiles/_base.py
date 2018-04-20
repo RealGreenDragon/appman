@@ -63,7 +63,7 @@ class Meta_Profile():
     meta_name = 'Generic_Meta_Profile'
 
     # Programs included into Meta_Profile (set of program names)
-    programs = set()
+    programs = set([])
 
     def __repr__(self):
         return "<{} -> {}>".format(self.meta_name, self.programs)
@@ -82,7 +82,7 @@ class Base_Profile():
     default_path = ''
 
     # Dependences (set of program names)
-    dependences = set()
+    dependences = set([])
 
     # Indicate here if the program is portable or not.
     # If is enabled, the "self._path" directory will be deleted automatically, otherwinse no.
@@ -107,6 +107,12 @@ class Base_Profile():
         self._logger = logging.getLogger('appman.%s' % self.program_name)
         self._debug = self._logger.getEffectiveLevel() == logging.DEBUG
         self._logger.debug('Init {} with params {}'.format(self.__class__.__name__, kargs))
+
+        # Choose 'innounp' command
+        if self._debug:
+            self._inno_extract_cmd = 'innounp -x {file_path} -d{dir_path} -b -y'
+        else:
+            self._inno_extract_cmd = 'innounp -x {file_path} -d{dir_path} -q -b -y'
 
         # Init connector
         self._connector = requests.Session()
@@ -286,9 +292,11 @@ class Base_Profile():
         Return:
             bool: True if the Current Working Directory is changed, False otherwise
         """
+        self._logger.debug('Changing cwd to "{}" ...'.format(path))
         if not self._check_dir(path):
             return False
         os.chdir(path)
+        self._logger.debug('New cwd: "{}"'.format(self._get_cwd()))
         return True
 
     def _list_files(self, directory, pattern='*.*', recursive=False):
@@ -400,6 +408,7 @@ class Base_Profile():
         if not (shortcut_name and is_string(shortcut_name)):
             shortcut_name = os.path.split(link_source)[1].rsplit('.', 1)[0]
         desktop_folder = os.path.join(os.environ['HOMEDRIVE'], os.environ['HOMEPATH'], 'Desktop')
+        self._logger.debug('Deleting "{}" desktop shortcut...'.format(shortcut_name))
         self._make_shortcut(os.path.join(desktop_folder, shortcut_name), link_source)
 
     def _delete_desktop_shortcut(self, shortcut_name):
@@ -415,6 +424,7 @@ class Base_Profile():
         desktop_folder = os.path.join(os.environ['HOMEDRIVE'], os.environ['HOMEPATH'], 'Desktop')
         shortcut_path = os.path.join(desktop_folder, shortcut_name + '.lnk')
         # Try to delete the shortcut only if it exists
+        self._logger.debug('Deleting "{}" desktop shortcut...'.format(shortcut_name))
         if self._check_file(shortcut_path):
             self._delete_file(shortcut_path)
 
@@ -434,6 +444,7 @@ class Base_Profile():
             ValueError if the path passed is not a string
             OSError if the path passed not exist or is not a dir
         """
+        self._logger.debug('Adding "{}" in the System Path...'.format(path))
         return self._syspath.add(path)
 
     def _syspath_remove(self, path):
@@ -452,6 +463,7 @@ class Base_Profile():
             ValueError if the path passed is not a string
             OSError if the path passed not exist or is not a dir
         """
+        self._logger.debug('Removing "{}" from the System Path...'.format(path))
         return self._syspath.remove(path)
 
     def _delete_dir(self, directory):
@@ -584,13 +596,14 @@ class Base_Profile():
             with open(path, 'w', encoding=encoding) as f:
                 f.write(content)
 
-    def _cmd_exec(self, cmd):
+    def _cmd_exec(self, cmd, posix=True):
         """
         Exec a commnad line.
         If debug is enabled, stdout and stderr will be printed on stderr, else will be suppressed.
 
         Params:
-            cmd (str): Command line to execute
+            cmd (str)   : Command line to execute
+            posix (bool): If True shlex.split() operates in POSIX mode, otherwise it uses non-POSIX mode
 
         Return:
             None
@@ -598,10 +611,10 @@ class Base_Profile():
         # Exec command line
         if self._debug:
             self._logger.debug('Exec command line:\n{}\n\n'.format(cmd))
-            res = call(shlex.split(cmd), stdout=sys.stderr)
+            res = call(shlex.split(cmd, posix=posix), shell=True, stdout=sys.stderr)
             print('\n', file=sys.stderr)
         else:
-            res = call(shlex.split(cmd), stdout=self._devnull, stderr=self._devnull)
+            res = call(shlex.split(cmd, posix=posix), stdout=self._devnull, stderr=self._devnull)
 
         # In case of errors, raise exception
         if res != 0:
@@ -618,7 +631,7 @@ class Base_Profile():
 
         Params:
             archive_path (str) : path of the archive to extract
-            target_folder (str): path of the destination folder (optional)
+            target_folder (str): path of the destination folder (Default: self._path)
 
         Return:
             None
@@ -634,20 +647,71 @@ class Base_Profile():
         except (PatoolError, OSError, TypeError, ValueError) as ex:
             raise ExtractException(ex)
 
+    def _extract_innosetup(self, setup_path, target_folder=None):
+        """
+        Extract an Inno Setup to the 'self.path' folder or to a specified folder.
+        Require that 'innounp' is installed and available in the path.
+
+        Params:
+            setup_path (str) : path of the Inno Setup to extract
+            target_folder (str): path of the destination folder (Default: self._path)
+
+        Return:
+            None
+        """
+        try:
+            # Split setup_path
+            dir_path, filename = os.path.split(setup_path)
+
+            # Change cwd
+            t = self._get_cwd()
+            self._set_cwd(dir_path)
+
+            # Run 'innounp'
+            self._cmd_exec(
+                self._inno_extract_cmd.format(
+                    dir_path=target_folder if target_folder else self._path,
+                    file_path=filename
+                ),
+                posix=False
+            )
+
+            # Reset cwd
+            self._set_cwd(t)
+        except OSError as ex:
+            raise ExtractException(ex)
+
     # ---------------------------------------------------------------------------
     # -------------------------- HTTP Requests Utilities-------------------------
     # ---------------------------------------------------------------------------
 
+    def _http_last_modified(self, url, params=None):
+        """
+        Shortcut to find the last modification date of a resource by an HTTP request.
+        The date is provided with this format: %Y.%m.%d-%H:%M:%S %Z
+        The string is always stripped, so if the time zone (%Z) is not present, there are no spaces in it.
+
+        Params:
+            url    : URL where retrieve the content
+            params : Dictionary or bytes to be sent in the query string
+
+        Returns:
+            str : The 'Last-Modified' response header value
+        """
+        with self._http_head_req(url, params=params) as r:
+            return parse_html_time(r.headers['Last-Modified'])
+
     def _http_head_req(self, url, params=None):
         """
         Shortcut to perform an HEAD HTTP request.
-        It is useful to see only the response headers.
+        It is useful to see only the response headers or not follow any HTTP redirection.
 
         Warning:
             Remember to use the returned obj in a 'with' statement,
             or call 'close()' method when you finished.
 
         Params:
+            url    : URL where retrieve the content
             params : Dictionary or bytes to be sent in the query string
 
         Returns:
@@ -660,6 +724,7 @@ class Base_Profile():
         Shortcut to perform a GET HTTP request and get a text response.
 
         Params:
+            url    : URL where retrieve the content
             params : Dictionary or bytes to be sent in the query string
 
         Returns:
@@ -672,6 +737,7 @@ class Base_Profile():
         Shortcut to perform a POST HTTP request and get a text response.
 
         Params:
+            url    : URL where retrieve the content
             params : Dictionary or bytes to be sent in the query string
             data   : Dictionary or list of tuples ``[(key, value)]`` (will be form-encoded), bytes, or file-like object to send in the body
 
@@ -685,6 +751,7 @@ class Base_Profile():
         Shortcut to perform a GET HTTP request and get a raw response.
 
         Params:
+            url    : URL where retrieve the content
             params : Dictionary or bytes to be sent in the query string
 
         Returns:
@@ -697,6 +764,7 @@ class Base_Profile():
         Shortcut to perform a POST HTTP request and get a raw response.
 
         Params:
+            url    : URL where retrieve the content
             params : Dictionary or bytes to be sent in the query string
             data   : Dictionary or list of tuples ``[(key, value)]`` (will be form-encoded), bytes, or file-like object to send in the body
 
@@ -710,6 +778,7 @@ class Base_Profile():
         Shortcut to perform a GET HTTP request and get a json response.
 
         Params:
+            url    : URL where retrieve the content
             params : Dictionary or bytes to be sent in the query string
 
         Returns:
@@ -722,6 +791,7 @@ class Base_Profile():
         Shortcut to perform a POST HTTP request and get a json response.
 
         Params:
+            url    : URL where retrieve the content
             params : Dictionary or bytes to be sent in the query string
             data   : Dictionary or list of tuples ``[(key, value)]`` (will be form-encoded), bytes, or file-like object to send in the body
 
@@ -740,6 +810,7 @@ class Base_Profile():
             or call 'close()' method when you finished.
 
         Params:
+            url    : URL where retrieve the content
             params : Dictionary or bytes to be sent in the query string
             data   : Dictionary or list of tuples ``[(key, value)]`` (will be form-encoded), bytes, or file-like object to send in the body
 

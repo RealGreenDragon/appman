@@ -1,11 +1,11 @@
 from ._base import Base_Profile
 from ._utils import *
 
-class UniExtract_Manager(Base_Profile):
+class InnoUnp_Manager(Base_Profile):
 
-    program_name = 'UniExtract'
+    program_name = 'InnoUnp'
 
-    default_path = 'C:\\Portable\\uniextract\\'
+    default_path = 'C:\\Portable\\innounp\\'
 
     # Not touch the method signature and the first row
     def __init__(self, **prog_data):
@@ -28,7 +28,8 @@ class UniExtract_Manager(Base_Profile):
             str : Latest version
         """
 
-        return self._http_get_req('https://www.legroom.net/software/uniextract').split('Current Version: ')[1].split(',')[0].strip()
+        return self._http_get_req('https://sourceforge.net/p/innounp/news/') \
+        .split('/">Inno Setup Unpacker ')[1].split(' ')[0].strip()
 
     def _get_download_data(self):
         """
@@ -51,10 +52,10 @@ class UniExtract_Manager(Base_Profile):
             list: DownloadData objects list (or a single DownloadData object if the download is only one)
         """
 
-        url = 'https://www.legroom.net/scripts/download.php?file=uniextract{}_noinst' \
-                    .format(self._latest_version.replace('.', ''))
+        url = self._http_get_req('https://sourceforge.net/projects/innounp/files/innounp/innounp%20{}/innounp{}.rar/download' \
+        .format(self._latest_version, self._latest_version.replace('.', ''))).split('; url=')[1].split('"')[0]
         return dl_get(
-                os.path.join(self._tmp_dir, 'uniextract_latest.rar'),
+                os.path.join(self._tmp_dir, 'innounp_latest.rar'),
                 url
             )
 
@@ -76,8 +77,6 @@ class UniExtract_Manager(Base_Profile):
         """
 
         self._extract(self._dl_data_list[0].path)
-
-        # Remove the downloaded file
         self._delete_file(self._dl_data_list[0].path)
 
     def _update_program(self):

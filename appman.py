@@ -17,7 +17,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ''' Source code data '''
 __title__           = 'appman'
 __author__          = 'Daniele Giudice'
-__version__         = '0.1.1'
+__version__         = '0.1.2'
 __license__         = 'GNU General Public License v3'
 __copyright__       = 'Copyright 2018 Daniele Giudice'
 __description__     = 'An application manager for Windows'
@@ -45,6 +45,7 @@ sys.path.append(APPMAN_DIR)
 from profiles import get_supported_programs, get_supported_programs_list, \
 get_supported_meta_programs, get_profile, expand_meta_program
 from profiles._utils import *
+from profiles._errors import *
 
 # Define data storage path
 DB_PATH = os.path.join(APPMAN_DIR, 'data.json')
@@ -138,9 +139,10 @@ class ApplicationManager():
     def _add_dependences(self, prog_name, dependences):
         for dep in dependences:
             if not dep in self._db['dependences']:
-                self._db['dependences'][dep] = set(prog_name)
-            else:
-                self._db['dependences'][dep].add(prog_name)
+                self._db['dependences'][dep] = [prog_name]
+            elif not prog_name in self._db['dependences'][dep]:
+                self._db['dependences'][dep].append(prog_name)
+                sorted(self._db['dependences'][dep])
 
     def _refresh_env(self):
         # Try to refresh Environmental Variables in the actual shell

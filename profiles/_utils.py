@@ -19,7 +19,9 @@ import json
 import os
 import progressbar
 import validators
+import time
 
+from datetime import datetime
 from python_utils.terminal import get_terminal_size
 from ._errors import ImplementationError
 
@@ -294,12 +296,16 @@ def copytree(src, dst, symlinks=False, ignore=None, copy_function=_default_copy,
     return dst
 
 
-''' Time '''
+''' Time and Date '''
 
 def format_time(seconds):
     m, s = divmod(seconds, 60)
     h, m = divmod(m, 60)
     return '%02d:%02d:%02d' % (h, m, s)
+
+def parse_html_time(html_time):
+    t = datetime.strptime(html_time, '%a, %d %b %Y %H:%M:%S %Z')
+    return t.strftime('%Y.%m.%d-%H:%M:%S %Z').strip()
 
 
 ''' Check '''

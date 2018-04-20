@@ -3,3 +3,5 @@
     - Initial release
 - v0.1.1
     - Fix System Path management and refresh
+- v0.1.2
+    - Several bug fixes

@@ -1,11 +1,13 @@
 from ._base import Base_Profile
 from ._utils import *
 
-class UniExtract_Manager(Base_Profile):
+class LightShot_Manager(Base_Profile):
 
-    program_name = 'UniExtract'
+    program_name = 'LightShot'
 
-    default_path = 'C:\\Portable\\uniextract\\'
+    default_path = 'C:\\Portable\\lightshot\\'
+
+    dependences = set(['innounp'])
 
     # Not touch the method signature and the first row
     def __init__(self, **prog_data):
@@ -27,8 +29,7 @@ class UniExtract_Manager(Base_Profile):
         Returns:
             str : Latest version
         """
-
-        return self._http_get_req('https://www.legroom.net/software/uniextract').split('Current Version: ')[1].split(',')[0].strip()
+        return self._http_last_modified('https://app.prntscr.com/build/setup-lightshot.exe').split('-')[0]
 
     def _get_download_data(self):
         """
@@ -50,12 +51,9 @@ class UniExtract_Manager(Base_Profile):
         Returns:
             list: DownloadData objects list (or a single DownloadData object if the download is only one)
         """
-
-        url = 'https://www.legroom.net/scripts/download.php?file=uniextract{}_noinst' \
-                    .format(self._latest_version.replace('.', ''))
         return dl_get(
-                os.path.join(self._tmp_dir, 'uniextract_latest.rar'),
-                url
+                os.path.join(self._tmp_dir, 'lightshot.exe'),
+                'https://app.prntscr.com/build/setup-lightshot.exe'
             )
 
     def _extract_latest_version(self):
@@ -74,10 +72,7 @@ class UniExtract_Manager(Base_Profile):
         Returns:
             None
         """
-
-        self._extract(self._dl_data_list[0].path)
-
-        # Remove the downloaded file
+        self._extract_innosetup(self._dl_data_list[0].path)
         self._delete_file(self._dl_data_list[0].path)
 
     def _update_program(self):
@@ -98,7 +93,15 @@ class UniExtract_Manager(Base_Profile):
             None
         """
 
-        pass
+        app_folder = os.path.join(self._path, '{app}')
+
+        # Update all files and folders
+        self._copy_dir(app_folder, self._path)
+
+        # Remove temp files
+        self._delete_dir(app_folder)
+        self._delete_dir(os.path.join(self._path, '{tmp}'))
+        self._delete_file(os.path.join(self._path, 'install_script.iss'))
 
     def _install_program(self):
         """
