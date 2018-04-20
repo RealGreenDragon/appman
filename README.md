@@ -15,7 +15,8 @@ Manager that automatically install/remove/update programs on Windows.
 - Can open CMD/PowerShell as Administrator
 
 ### Installation steps
-- Clone the repository where you want (preferably in "C:\\appman" or "C:\\ProgramData\\appman")
+- Download the [last stable release](https://github.com/MagicGreenDragon/appman/releases/latest) (recommended) or clone the master branch
+- Put the program where you want (preferably in "C:\\appman" or "C:\\ProgramData\\appman")
 - Add the folder 'appman\\bin' to the system path
 - Now you can reach the manager simply typing 'appman' on CMD/PowerShell from any location
 - In the same way you can now reach 7-Zip typing '7z' (or '7zfm' if you want the GUI)
