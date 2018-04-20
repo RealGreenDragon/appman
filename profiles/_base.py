@@ -44,6 +44,7 @@ import shutil
 import time
 import traceback
 import sys
+import winsyspath
 
 # AppMan 'bin' folder
 BIN_FOLDER = os.path.join(
@@ -152,7 +153,7 @@ class Base_Profile():
         self._devnull = open(os.devnull, 'w') if self._debug else None
 
         # Open System Path Wrapper
-        self._syspath = WinEnvPath()
+        self._syspath = winsyspath.WinSysPath()
 
     def __repr__(self):
         return "<{} v{} at {}>".format(self.program_name, self._current_version, self._path)
@@ -422,30 +423,36 @@ class Base_Profile():
         Add a path in the System Path.
 
         Params:
-            path (str): path to add
+            path (str) : directory path to add in System Path
 
         Returns:
-            None
+            bool: True if the System Path value is modified, False otherwise
 
         Raises:
-            WindowsError
+            EnvironmentError if the user is not an "admin" or the admin check fails
+            WindowsError if an error occurred when try to edit System Path value
+            ValueError if the path passed is not a string
+            OSError if the path passed not exist or is not a dir
         """
-        self._syspath.add(path)
+        return self._syspath.add(path)
 
     def _syspath_remove(self, path):
         """
         Remove a path from the System Path.
 
         Params:
-            path (str): path to remove
+            path (str): directory path to remove from System Path
 
         Returns:
-            None
+            bool: True if the System Path value is modified, False otherwise
 
         Raises:
-            WindowsError
+            EnvironmentError if the user is not an "admin" or the admin check fails
+            WindowsError if an error occurred when try to edit System Path value
+            ValueError if the path passed is not a string
+            OSError if the path passed not exist or is not a dir
         """
-        self._syspath.remove(path)
+        return self._syspath.remove(path)
 
     def _delete_dir(self, directory):
         """

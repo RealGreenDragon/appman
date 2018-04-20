@@ -17,7 +17,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ''' Source code data '''
 __title__           = 'appman'
 __author__          = 'Daniele Giudice'
-__version__         = '0.1'
+__version__         = '0.1.1'
 __license__         = 'GNU General Public License v3'
 __copyright__       = 'Copyright 2018 Daniele Giudice'
 __description__     = 'An application manager for Windows'
@@ -28,6 +28,7 @@ import logging
 import os
 import platform
 import sys
+import subprocess
 import time
 import traceback
 import winvers
@@ -60,6 +61,7 @@ class ApplicationManager():
         self._logger = logging.getLogger('appman.wrapper')
 
         # Init vars
+        self._refresh_env_cmd = 'cmd /c RefreshEnv.bat'
         self._db_path = DB_PATH
         self._db = {
             'dependences': {},
@@ -140,6 +142,14 @@ class ApplicationManager():
             else:
                 self._db['dependences'][dep].add(prog_name)
 
+    def _refresh_env(self):
+        # Try to refresh Environmental Variables in the actual shell
+        try:
+            with open(os.devnull, 'w') as devnull:
+                subprocess.run(self._refresh_env_cmd, stdout=devnull, stderr=devnull, shell=True, check=True)
+        except subprocess.CalledProcessError:
+            print('WARNING: Cannot Refresh Environmental Variables (restart the shell to see the changes).')
+
     @property
     def installed_programs(self):
         return list(self._db['installed'].keys())
@@ -218,8 +228,15 @@ class ApplicationManager():
                 self._logger.debug('Updating {} DB record ...'.format(prog_name))
                 self._db['installed'].update(p.prog_data)
                 self._add_dependences(prog_name, dependences)
+
+                # Update DB and cleanup
                 self._write_json()
                 del p
+
+                # Try to refresh Environmental Variables in the actual shell
+                self._refresh_env()
+
+                # Exit
                 return True
             else:
                 del p
@@ -245,8 +262,12 @@ class ApplicationManager():
                 # If the update succeed, update the DB
                 self._logger.debug('Updating {} DB record ...'.format(prog_name))
                 self._db['installed'].update(p.prog_data)
+
+                # Update DB and cleanup
                 self._write_json()
                 del p
+
+                # Exit
                 return True
             else:
                 self._logger.debug('Version not changed, so {} DB record not updated'.format(prog_name))
@@ -292,8 +313,14 @@ class ApplicationManager():
                     except (TypeError, ValueError, KeyError):
                         pass
 
+                # Update DB and cleanup
                 self._write_json()
                 del p
+
+                # Try to refresh Environmental Variables in the actual shell
+                self._refresh_env()
+
+                # Exit
                 return True
             else:
                 del p
