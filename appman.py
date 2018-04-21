@@ -17,7 +17,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ''' Source code data '''
 __title__           = 'appman'
 __author__          = 'Daniele Giudice'
-__version__         = '0.1.2'
+__version__         = '0.1.3'
 __license__         = 'GNU General Public License v3'
 __copyright__       = 'Copyright 2018 Daniele Giudice'
 __description__     = 'An application manager for Windows'
@@ -47,9 +47,6 @@ get_supported_meta_programs, get_profile, expand_meta_program
 from profiles._utils import *
 from profiles._errors import *
 
-# Define data storage path
-DB_PATH = os.path.join(APPMAN_DIR, 'data.json')
-
 # Define log format
 LOG_FORMAT = logging.Formatter('[%(asctime)s] %(levelname)8s - %(name)s: %(message)s')
 
@@ -63,7 +60,7 @@ class ApplicationManager():
 
         # Init vars
         self._refresh_env_cmd = 'cmd /c RefreshEnv.bat'
-        self._db_path = DB_PATH
+        self._db_path = os.path.join(APPMAN_DIR, 'data.json')
         self._db = {
             'dependences': {},
             'installed': {}
@@ -77,6 +74,9 @@ class ApplicationManager():
         db_dir = os.path.split(self._db_path)[0]
         if not ( os.path.isdir(db_dir) and os.access(db_dir, os.W_OK) ):
             raise ProgramDBException('Invalid path (directory inexistent or not writable) -> {}'.format(self._db_path))
+
+        # Define temporary DB file path
+        self._db_path_tmp = self._db_path + '.tmp'
 
         # Check if the DB exists and if can be opened
         db_found = False
@@ -102,7 +102,8 @@ class ApplicationManager():
         res = set(self.installed_programs) - set(self._supported_programs)
         if res:
             raise ImplementationError(
-                'Programs installed, but profiles not found: ' + ', '.join(res))
+                'Programs installed, but profiles not found: ' + ', '.join(res)
+                )
 
     def __repr__(self):
         return "<AppMan Wrapper - DB Path: {} - Programs installed: {}>" \
@@ -115,26 +116,33 @@ class ApplicationManager():
         del self._db
 
     def _read_json(self):
-        self._logger.debug('Opening JSON file for reading --> {}'.format(self._db_path))
+        self._logger.debug('Opening JSON file for reading --> {}'.format(
+            self._db_path
+            ))
         try:
             with open(self._db_path, encoding='UTF-8') as f:
                 json_content = json.load(f)
                 self._logger.debug('Content: \n' + json.dumps(json_content))
                 self._db = json_content
-        except IOError as ex:
+        except (IOError, OSError) as ex:
             raise ProgramDBException('Cannot open ProgDB for reading')
         except ValueError as ex:
-            raise ProgramDBException('Cannot parse ProgDB content')
+            raise ProgramDBException('Cannot parse ProgDB JSON content')
 
     def _write_json(self):
-        self._logger.debug('Opening JSON file for writing --> {}\nContent: {}'.format(self._db_path, self._db))
+        self._logger.debug('Opening JSON file for writing --> {}\nContent: {}'.format(
+            self._db_path_tmp, self._db
+            ))
         try:
-            with open(self._db_path, 'w', encoding='UTF-8') as f:
+            with open(self._db_path_tmp, 'w', encoding='UTF-8') as f:
                 json.dump(self._db, f, indent=4, sort_keys=True)
-        except IOError as ex:
+            self._logger.debug('Replacing old ProgDB with the updated version')
+            os.remove(self._db_path)
+            os.rename(self._db_path_tmp, self._db_path)
+        except (IOError, OSError) as ex:
             raise ProgramDBException('Cannot open ProgDB for writing')
         except ValueError as ex:
-            raise ProgramDBException('Cannot convert ProgDB content to str')
+            raise ProgramDBException('Cannot serialize ProgDB content to JSON')
 
     def _add_dependences(self, prog_name, dependences):
         for dep in dependences:
@@ -287,7 +295,10 @@ class ApplicationManager():
         # A program can be removed only if its dependences set is empty (so it is not necessary fo any other programs)
         try:
             if self._db['dependences'][prog_name]:
-                print('Cannot remove "{}", because it is necessary for: {}'.format(prog_name, self._db['dependences'][prog_name]))
+                print('Cannot remove "{}", because it is necessary for:\n{}'.format(
+                    prog_name,
+                    '\n'.join(self._db['dependences'][prog_name])
+                    ))
                 return False
         except KeyError:
             pass
@@ -311,7 +322,7 @@ class ApplicationManager():
                 # Remove the program from dependences lists
                 for dep in self._db['dependences']:
                     try:
-                        dep.remove(prog_name)
+                        self._db['dependences'][dep].remove(prog_name)
                     except (TypeError, ValueError, KeyError):
                         pass
 
