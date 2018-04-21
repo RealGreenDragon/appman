@@ -137,7 +137,8 @@ class ApplicationManager():
             with open(self._db_path_tmp, 'w', encoding='UTF-8') as f:
                 json.dump(self._db, f, indent=4, sort_keys=True)
             self._logger.debug('Replacing old ProgDB with the updated version')
-            os.remove(self._db_path)
+            if os.path.exists(self._db_path):
+                os.remove(self._db_path)
             os.rename(self._db_path_tmp, self._db_path)
         except (IOError, OSError) as ex:
             raise ProgramDBException('Cannot open ProgDB for writing')
