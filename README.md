@@ -15,6 +15,7 @@ Manager that automatically install/remove/update programs on Windows.
 - Can open CMD/PowerShell as Administrator
 
 ### Installation steps
+- Install [Microsoft C Runtime 2015](https://www.microsoft.com/en-us/download/details.aspx?id=48145)
 - Download the [last stable release](https://github.com/MagicGreenDragon/appman/releases/latest) (recommended) or clone the master branch
 - Put the program where you want (preferably in "C:\\appman" or "C:\\ProgramData\\appman")
 - Add the folder 'appman\\bin' to the system path
