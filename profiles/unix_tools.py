@@ -16,8 +16,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from ._base import Meta_Profile
 
-class Webdrivers_Meta_Profile(Meta_Profile):
+class UnixTools_Meta_Profile(Meta_Profile):
 
-    meta_name = 'Webdrivers'
+    meta_name = 'Unix-Tools'
 
-    programs = set(['webdriver-chrome', 'webdriver-edge', 'webdriver-firefox', 'webdriver-ie'])
+    programs = set(['gawk', 'grep', 'sed', 'wget'])

@@ -25,8 +25,6 @@ from urllib.parse import quote as url_quote
 from urllib.parse import unquote as url_unquote
 from urllib.parse import urlencode
 
-from subprocess import call
-
 from patoolib.util import PatoolError
 from requests.exceptions import RequestException, Timeout
 
@@ -41,8 +39,10 @@ import patoolib
 import platform
 import shlex
 import shutil
+import tempfile
 import time
 import traceback
+import subprocess
 import sys
 import winsyspath
 
@@ -155,9 +155,6 @@ class Base_Profile():
         else:
             self._executables = []
 
-        # Open null output stream (if 'self._debug' is False)
-        self._devnull = open(os.devnull, 'w') if self._debug else None
-
         # Open System Path Wrapper
         self._syspath = winsyspath.WinSysPath()
 
@@ -169,8 +166,6 @@ class Base_Profile():
     def __del__(self):
         if self._connector is not None:
             self._connector.close()
-        if self._devnull is not None:
-            self._devnull.close()
 
     # ---------------------------------------------------------------------------
     # -------------------------- Strings Utilities-------------------------------
@@ -212,7 +207,7 @@ class Base_Profile():
         Return:
             str: the OS temp folder
         """
-        return os.path.expandvars('%temp%')
+        return tempfile.gettempdir()
 
     @property
     def _arch(self):
@@ -330,7 +325,7 @@ class Base_Profile():
 
     def _make_bat_link(self, link_source):
         """
-        Create a bat file that call and executable.
+        Create a bat file that call and executable (meant only for appman 'bin' folder).
         Using a "bat link" instead a symlink allow to not copy the needed files
         in executalbe folder (for example DLL files).
 
@@ -346,29 +341,28 @@ class Base_Profile():
         self._save_file(BAT_LINK_FORMAT.format(link_source), link_dest)
         return (link_dest, filename)
 
-    def _make_symlink(self, link_source, is_dir=False):
+    def _make_symlink(self, link_source, link_dest, is_dir=False):
         """
         Create a symlink to a file/directory
 
         Warning:
-            Works only on Python 3.2 or upper, and on Unix or Windows Vista (or newer).
+            Works only with Python 3.2 (or newer) and on Windows Vista (or newer).
 
         Params:
-            link_source (str): source path of the link
-            is_dir (bool)    : if the path is a file or a directory (default: file)
+            link_source (str)   : source path of the link
+            link_dest (str)     : destination path of the link
+            is_dir (bool)       : if the path is a file or a directory (default: file)
 
         Return:
-            (str, str): the symlink path and the symlink name
+            None
         """
-        filename = os.path.split(link_source)[1]
-        link_dest = os.path.join(BIN_FOLDER, filename)
-        # If the link already exists, delete it
-        if self._check_file(link_dest):
-            self._delete_file(link_dest)
-        # On python 3.2 and upper 'os.symlink' works also in windows
-        self._logger.debug("Creating symlink: {} <==> {}".format(link_source, link_dest))
+        # On python 3.2 and upper 'os.symlink' works also in windows (Vista or newer)
+        self._logger.debug("Creating {}: {} <==> {}".format(
+            'folder symlink' if is_dir else 'file symlink',
+            link_source,
+            link_dest
+            ))
         os.symlink(link_source, link_dest, target_is_directory=is_dir)
-        return (link_dest, filename)
 
     def _make_shortcut(self, shortcut_path, link_source):
         """
@@ -596,29 +590,59 @@ class Base_Profile():
             with open(path, 'w', encoding=encoding) as f:
                 f.write(content)
 
-    def _cmd_exec(self, cmd, posix=True):
+    def _find_file(self, pattern):
         """
-        Exec a commnad line.
-        If debug is enabled, stdout and stderr will be printed on stderr, else will be suppressed.
+        Find a file in the current directory and in the paths specified by the PATH environment variable.
 
         Params:
-            cmd (str)   : Command line to execute
-            posix (bool): If True shlex.split() operates in POSIX mode, otherwise it uses non-POSIX mode
+            pattern (str) : Filename pattern to find
 
-        Return:
-            None
+        Returns:
+            list: file paths found (paths are bytes string)
         """
+
+        try:
+            res = self._cmd_exec('where {}'.format(pattern), check=True, capture_stdout=True)
+            return res.stdout.splitlines()
+        except subprocess.CalledProcessError:
+            return []
+
+    def _cmd_exec(self, cmd, posix=True, capture_stdout=False, capture_stderr=False, **kwargs):
+        """
+        Exec a commnad line.
+        If debug is enabled, stdout and stderr will be printed on stderr, else capture_* args values will be evaluated.
+
+        Params:
+            cmd (str)             : Command line to execute
+            posix (bool)          : If True shlex.split() operates in POSIX mode, otherwise it uses non-POSIX mode
+            capture_stdout (bool) : If True, 'stdout' will be captured and saved in CompletedProcess response, otherwise no (Default: False)
+            capture_stderr (bool) : If True, 'stderr' will be captured and saved in CompletedProcess response, otherwise no (Default: False)
+            **kwargs (optional)   : Other args supported by 'subprocess.run()' function (except 'stdout' and 'stderr')
+
+        Returns:
+            subprocess.CompletedProcess
+        """
+        if 'stdout' in kwargs or 'stderr' in kwargs:
+            raise ImplementationError("_cmd_exec: 'stdout' and 'stderr' args cannot be altered")
+
+        # Split command line
+        cmd = shlex.split(cmd, posix=posix)
+
         # Exec command line
         if self._debug:
             self._logger.debug('Exec command line:\n{}\n\n'.format(cmd))
-            res = call(shlex.split(cmd, posix=posix), shell=True, stdout=sys.stderr)
+            res = subprocess.run(cmd, stdout=sys.stderr, **kwargs)
             print('\n', file=sys.stderr)
         else:
-            res = call(shlex.split(cmd, posix=posix), stdout=self._devnull, stderr=self._devnull)
+            res = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE if capture_stdout else subprocess.DEVNULL,
+                stderr=subprocess.PIPE if capture_stderr else subprocess.DEVNULL,
+                **kwargs
+                )
 
-        # In case of errors, raise exception
-        if res != 0:
-            raise OSError("Errors or warnings occurred in the command executions (exit code: {})".format(res))
+        # Return command result
+        return res
 
     # ---------------------------------------------------------------------------
     # -------------------------- Extraction Utilities ---------------------------
@@ -660,24 +684,17 @@ class Base_Profile():
             None
         """
         try:
-            # Split setup_path
-            dir_path, filename = os.path.split(setup_path)
-
-            # Change cwd
-            t = self._get_cwd()
-            self._set_cwd(dir_path)
-
+            # Split path
+            file_path, file_name = os.path.split(setup_path)
             # Run 'innounp'
             self._cmd_exec(
                 self._inno_extract_cmd.format(
                     dir_path=target_folder if target_folder else self._path,
-                    file_path=filename
+                    file_path=file_name
                 ),
-                posix=False
+                posix=False, # Split command using non-Unix rules
+                cwd=file_path # Changes cwd for the comamnd
             )
-
-            # Reset cwd
-            self._set_cwd(t)
         except OSError as ex:
             raise ExtractException(ex)
 
@@ -685,23 +702,26 @@ class Base_Profile():
     # -------------------------- HTTP Requests Utilities-------------------------
     # ---------------------------------------------------------------------------
 
-    def _http_last_modified(self, url, params=None):
+    def _http_last_modified(self, url, **kwargs):
         """
         Shortcut to find the last modification date of a resource by an HTTP request.
         The date is provided with this format: %Y.%m.%d-%H:%M:%S %Z
         The string is always stripped, so if the time zone (%Z) is not present, there are no spaces in it.
 
         Params:
-            url    : URL where retrieve the content
-            params : Dictionary or bytes to be sent in the query string
+            url (str/bytes)     : URL where retrieve the content
+            **kwargs (optional) : Other args supported by 'requests' module
 
         Returns:
-            str : The 'Last-Modified' response header value
+            str : The 'Last-Modified' response header value, or empty string if 'Last-Modified' header is not found
         """
-        with self._http_head_req(url, params=params) as r:
-            return parse_html_time(r.headers['Last-Modified'])
+        with self._http_head_req(url, **kwargs) as r:
+            if 'Last-Modified' in r.headers:
+                return parse_html_time(r.headers['Last-Modified'])
+            else:
+                return ''
 
-    def _http_head_req(self, url, params=None):
+    def _http_head_req(self, url, **kwargs):
         """
         Shortcut to perform an HEAD HTTP request.
         It is useful to see only the response headers or not follow any HTTP redirection.
@@ -711,113 +731,112 @@ class Base_Profile():
             or call 'close()' method when you finished.
 
         Params:
-            url    : URL where retrieve the content
-            params : Dictionary or bytes to be sent in the query string
+            url (str/bytes)     : URL where retrieve the content
+            **kwargs (optional) : Other args supported by 'requests' module
 
         Returns:
             requests.models.Response : The response obj
         """
-        return self._http_req(HTTPMethods.HEAD, url, HTTPResponse.TEXT, params=params)
+        return self._http_req(HTTPMethods.HEAD, url, HTTPResponse.TEXT, **kwargs)
 
-    def _http_get_req(self, url, params=None):
+    def _http_get_req(self, url, **kwargs):
         """
         Shortcut to perform a GET HTTP request and get a text response.
 
         Params:
-            url    : URL where retrieve the content
-            params : Dictionary or bytes to be sent in the query string
+            url (str/bytes)     : URL where retrieve the content
+            **kwargs (optional) : Other args supported by 'requests' module
 
         Returns:
             str : The text response body
         """
-        return self._http_req(HTTPMethods.GET, url, HTTPResponse.TEXT, params=params)
+        return self._http_req(HTTPMethods.GET, url, HTTPResponse.TEXT, **kwargs)
 
-    def _http_post_req(self, url, params=None, data=None):
+    def _http_post_req(self, url, **kwargs):
         """
         Shortcut to perform a POST HTTP request and get a text response.
 
         Params:
-            url    : URL where retrieve the content
-            params : Dictionary or bytes to be sent in the query string
-            data   : Dictionary or list of tuples ``[(key, value)]`` (will be form-encoded), bytes, or file-like object to send in the body
+            url (str/bytes)     : URL where retrieve the content
+            **kwargs (optional) : Other args supported by 'requests' module
 
         Returns:
             str : The text response body
         """
-        return self._http_req(HTTPMethods.POST, url, HTTPResponse.TEXT, params=params, data=data)
+        return self._http_req(HTTPMethods.POST, url, HTTPResponse.TEXT, **kwargs)
 
-    def _http_raw_get_req(self, url, params=None):
+    def _http_raw_get_req(self, url, **kwargs):
         """
         Shortcut to perform a GET HTTP request and get a raw response.
 
         Params:
-            url    : URL where retrieve the content
-            params : Dictionary or bytes to be sent in the query string
+            url (str/bytes)     : URL where retrieve the content
+            **kwargs (optional) : Other args supported by 'requests' module
 
         Returns:
             bytes : The raw response body
         """
-        return self._http_req(HTTPMethods.GET, url, HTTPResponse.RAW, params=params)
+        return self._http_req(HTTPMethods.GET, url, HTTPResponse.RAW, **kwargs)
 
-    def _http_raw_post_req(self, url, params=None, data=None):
+    def _http_raw_post_req(self, url, **kwargs):
         """
         Shortcut to perform a POST HTTP request and get a raw response.
 
         Params:
-            url    : URL where retrieve the content
-            params : Dictionary or bytes to be sent in the query string
-            data   : Dictionary or list of tuples ``[(key, value)]`` (will be form-encoded), bytes, or file-like object to send in the body
+            url (str/bytes)     : URL where retrieve the content
+            **kwargs (optional) : Other args supported by 'requests' module
 
         Returns:
             bytes : The raw response body
         """
-        return self._http_req(HTTPMethods.POST, url, HTTPResponse.RAW, params=params, data=data)
+        return self._http_req(HTTPMethods.POST, url, HTTPResponse.RAW, **kwargs)
 
-    def _http_json_get_req(self, url, params=None):
+    def _http_json_get_req(self, url, **kwargs):
         """
         Shortcut to perform a GET HTTP request and get a json response.
 
         Params:
-            url    : URL where retrieve the content
-            params : Dictionary or bytes to be sent in the query string
+            url (str/bytes)     : URL where retrieve the content
+            **kwargs (optional) : Other args supported by 'requests' module
 
         Returns:
             dict : The json response body
         """
-        return self._http_req(HTTPMethods.GET, url, HTTPResponse.JSON, params=params)
+        return self._http_req(HTTPMethods.GET, url, HTTPResponse.JSON, **kwargs)
 
-    def _http_json_post_req(self, url, params=None, data=None):
+    def _http_json_post_req(self, url, **kwargs):
         """
         Shortcut to perform a POST HTTP request and get a json response.
 
         Params:
-            url    : URL where retrieve the content
-            params : Dictionary or bytes to be sent in the query string
-            data   : Dictionary or list of tuples ``[(key, value)]`` (will be form-encoded), bytes, or file-like object to send in the body
+            url (str/bytes)     : URL where retrieve the content
+            **kwargs (optional) : Other args supported by 'requests' module
 
         Returns:
             dict : The json response body
         """
-        return self._http_req(HTTPMethods.POST, url, HTTPResponse.JSON, params=params, data=data)
+        return self._http_req(HTTPMethods.POST, url, HTTPResponse.JSON, **kwargs)
 
-    def _http_dl_req(self, method, url, params=None, data=None):
+    def _http_dl_req(self, method, url, **kwargs):
         """
         Shortcut to perform a GET/POST HTTP request and the response is large.
-        It is useful for downloading files.
+        It is useful for downloading files (direct URL only).
 
         Warning:
             Remember to use the returned obj in a 'with' statement,
             or call 'close()' method when you finished.
 
         Params:
-            url    : URL where retrieve the content
-            params : Dictionary or bytes to be sent in the query string
-            data   : Dictionary or list of tuples ``[(key, value)]`` (will be form-encoded), bytes, or file-like object to send in the body
+            url (str/bytes)     : URL where retrieve the content
+            **kwargs (optional) : Other args supported by 'requests' module
 
         Returns:
             dict : The json response body
         """
-        return self._http_req(method, url, HTTPResponse.RAW, params=None, data=None, stream=True)
+        if 'stream' in kwargs and not kwargs['stream']:
+            raise ImplementationError('_http_dl_req must be a stream request')
+
+        return self._http_req(method, url, HTTPResponse.RAW, stream=True, **kwargs)
 
     def _http_req(self, method, url, ret_type, **kwargs):
         """
@@ -832,7 +851,7 @@ class Base_Profile():
             method (str)        : HTTP Method to use (see 'HTTPMethods' class)
             url (str)           : URL where retrieve the content
             ret_type (str)      : The expected response type (see 'HTTPResponse' class), but ignored if method==HTTPMethods.HEAD
-            **kwargs (optional) : Other args supported by requests lib
+            **kwargs (optional) : Other args supported by 'requests' module
 
         Returns:
             - If 'method' is HTTPMethods.HEAD or 'is_stream' is True
@@ -906,7 +925,7 @@ class Base_Profile():
         """
         try:
             self._logger.debug('Init download -> {}'.format(dl_data))
-            with self._http_dl_req(dl_data.method, dl_data.url, dl_data.params, dl_data.data) as r:
+            with self._http_dl_req(dl_data.method, dl_data.url, params=dl_data.params, data=dl_data.data) as r:
                 # Parse file size (if provided)
                 file_size = int(r.headers.get('content-length', 0))
                 if file_size <= 0:
@@ -921,8 +940,15 @@ class Base_Profile():
                         if chunk:
                             f.write(chunk)
             self._logger.debug('Download done')
+        except Timeout:
+            raise HTTPRequestException("Request timeout -> {}".format(dl_data))
         except (RequestException, OSError, IOError) as ex:
-            raise HTTPRequestException(ex)
+            if not dl_data.can_fail:
+                raise HTTPRequestException(ex)
+            else:
+                # If created, remove 'dl_data.path' file
+                if self._check_file(dl_data.path):
+                    self._delete_file(dl_data.path)
 
     # ---------------------------------------------------------------------------
     # -------------------------- Manager Core -----------------------------------
@@ -1025,6 +1051,8 @@ class Base_Profile():
                     executables = [executables]
                 if is_list(executables) and all(not self._check_file(e) and self._check_abs_path(e) for e in executables):
                     for ex in executables:
+                        if not ex.endswith('\\'):
+                            ex = ex + '\\'
                         self._syspath_add(ex)
                         self._executables.append(ex)
                 else:

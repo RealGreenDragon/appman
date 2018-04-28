@@ -55,7 +55,7 @@ class DownloadData():
     """
     Wrapper to require the download of a file.
     """
-    def __init__(self, path, method, url, params=None, data=None):
+    def __init__(self, path, method, url, params=None, data=None, can_fail=False):
         """
         Init a download request.
 
@@ -65,6 +65,7 @@ class DownloadData():
             url (str)    : URL where retrieve the content
             params       : Dictionary or bytes to be sent in the query string (GET data)
             data         : Dictionary or list of tuples ``[(key, value)]`` (will be form-encoded), bytes, or file-like object to send in the body (POST data)
+            can_fail (bool): If True, the download can fail without errors, otherwise if it fail an error will be raised
         """
 
         # Check and set method
@@ -97,9 +98,12 @@ class DownloadData():
         else:
             raise ImplementationError('DownloadData: the data "{}" is invalid'.format(data))
 
+        # Set can_fail
+        self._can_fail = bool(can_fail)
+
     def __repr__(self):
-        return "<path={} ; method={} ; URL={} ; params={} ; data={}>" \
-        .format(self._path, self._method, self._url, self._params, self._data)
+        return "<path={} ; method={} ; URL={} ; params={} ; data={} ; can_fail={}>" \
+        .format(self._path, self._method, self._url, self._params, self._data, self._can_fail)
 
     __str__ = __repr__
 
@@ -123,7 +127,11 @@ class DownloadData():
     def path(self):
         return self._path
 
-def dl_get(path, url, params=None, data=None):
+    @property
+    def can_fail(self):
+        return self._can_fail
+
+def dl_get(path, url, params=None, data=None, can_fail=False):
     """
     Shortcut to make a DownloadData object which provides a GET request.
 
@@ -134,10 +142,11 @@ def dl_get(path, url, params=None, data=None):
             HTTPMethods.GET,
             url,
             params,
-            data
+            data,
+            can_fail
         )
 
-def dl_post(filename, url, params=None, data=None):
+def dl_post(filename, url, params=None, data=None, can_fail=False):
     """
     Shortcut to make a DownloadData object which provides a POST request.
 
@@ -148,7 +157,8 @@ def dl_post(filename, url, params=None, data=None):
             HTTPMethods.POST,
             url,
             params,
-            data
+            data,
+            can_fail
         )
 
 def download_progressbar(total_size):

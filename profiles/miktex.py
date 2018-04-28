@@ -17,16 +17,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from ._base import Base_Profile
 from ._utils import *
 
-class YoutubeDL_Manager(Base_Profile):
+class MiKTeX_Manager(Base_Profile):
 
-    program_name = 'Youtube-DL'
+    program_name = 'MiKTeX'
 
-    default_path = 'C:\\Portable\\youtubedl\\'
+    default_path = 'C:\\Portable\\miktex\\'
+
+    dependences = set(['ghostscript', 'synctex'])
 
     # Not touch the method signature and the first row
     def __init__(self, **prog_data):
         super(self.__class__, self).__init__(**prog_data)
         # Here you can add other inits useful for the profile
+        self.bin_path = os.path.join(self._path, 'texmfs', 'install', 'miktex', 'bin')
 
     def _get_latest_version(self):
         """
@@ -44,7 +47,8 @@ class YoutubeDL_Manager(Base_Profile):
             str : Latest version
         """
 
-        return self._http_head_req('https://github.com/rg3/youtube-dl/releases/latest').headers['Location'].split('/')[-1]
+        info_html = self._http_get_req('https://miktex.org/portable')
+        return info_html.split('File name:</td>', 1)[1].split('.exe</td>', 1)[0].split('miktex-portable-')[1].strip()
 
     def _get_download_data(self):
         """
@@ -67,10 +71,16 @@ class YoutubeDL_Manager(Base_Profile):
             list: DownloadData objects list (or a single DownloadData object if the download is only one)
         """
 
-        return dl_get(
-                os.path.join(self._path, 'youtube-dl.exe'),
-                'https://github.com/rg3/youtube-dl/releases/download/{}/youtube-dl.exe'.format(self._latest_version)
+        url = 'https://ctan.mirror.garr.it/mirrors/CTAN/systems/win32/miktex/setup/windows-x86/miktex-portable-{}.exe'.format(
+            self._latest_version
+        )
+
+        return [
+            dl_get(
+                os.path.join(self._tmp_dir, 'miktex_latest.7z'),
+                url
             )
+        ]
 
     def _extract_latest_version(self):
         """
@@ -89,7 +99,10 @@ class YoutubeDL_Manager(Base_Profile):
             None
         """
 
-        pass
+        self._extract(self._dl_data_list[0].path)
+
+        # Remove the downloaded file
+        self._delete_file(self._dl_data_list[0].path)
 
     def _update_program(self):
         """
@@ -149,7 +162,7 @@ class YoutubeDL_Manager(Base_Profile):
             list: folders absolute path list (or a single absolute path if the folder is only one)
         """
 
-        return self._path
+        return self.bin_path
 
     def _remove_program(self):
         """

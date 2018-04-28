@@ -1,9 +1,13 @@
 ## History
 - v0.1.0
-    - Initial release
+    - First stable version
 - v0.1.1
     - Fix System Path management and refresh
 - v0.1.2
     - Several bug fixes
 - v0.1.3
     - Added secure DB write
+- v0.2.0
+    - New profiles added
+    - Other new features
+    - Various issues fixed

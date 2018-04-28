@@ -17,11 +17,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from ._base import Base_Profile
 from ._utils import *
 
-class YoutubeDL_Manager(Base_Profile):
+class Wget_Manager(Base_Profile):
 
-    program_name = 'Youtube-DL'
+    program_name = 'Wget'
 
-    default_path = 'C:\\Portable\\youtubedl\\'
+    default_path = 'C:\\Portable\\unixtools\\wget\\'
+
+    can_update = False
 
     # Not touch the method signature and the first row
     def __init__(self, **prog_data):
@@ -44,7 +46,10 @@ class YoutubeDL_Manager(Base_Profile):
             str : Latest version
         """
 
-        return self._http_head_req('https://github.com/rg3/youtube-dl/releases/latest').headers['Location'].split('/')[-1]
+        page_html = self._http_get_req('http://gnuwin32.sourceforge.net/packages.html')
+        last_ver = page_html.split('<td valign="top"><a href="packages/wget')[1] \
+        .split('<td valign="top">', 1)[1].split('</td>', 1)[0].strip()
+        return last_ver + '-1'
 
     def _get_download_data(self):
         """
@@ -66,10 +71,10 @@ class YoutubeDL_Manager(Base_Profile):
         Returns:
             list: DownloadData objects list (or a single DownloadData object if the download is only one)
         """
-
+        url = self._http_get_req('http://downloads.sourceforge.net/gnuwin32/wget-{}-setup.exe'.format(self._latest_version))
         return dl_get(
-                os.path.join(self._path, 'youtube-dl.exe'),
-                'https://github.com/rg3/youtube-dl/releases/download/{}/youtube-dl.exe'.format(self._latest_version)
+                os.path.join(self._tmp_dir, 'wget_latest.exe'),
+                url.split('; url=')[1].split('"', 1)[0]
             )
 
     def _extract_latest_version(self):
@@ -89,7 +94,10 @@ class YoutubeDL_Manager(Base_Profile):
             None
         """
 
-        pass
+        self._extract_innosetup(self._dl_data_list[0].path)
+
+        # Remove the downloaded file
+        self._delete_file(self._dl_data_list[0].path)
 
     def _update_program(self):
         """
@@ -109,7 +117,16 @@ class YoutubeDL_Manager(Base_Profile):
             None
         """
 
-        pass
+        app_folder = os.path.join(self._path, '{app}')
+
+        # Update all files and folders
+        self._copy_dir(app_folder, self._path)
+
+        # Remove temp files
+        self._delete_dir(app_folder)
+        if self._check_dir(os.path.join(self._path, '{tmp}')):
+            self._delete_dir(os.path.join(self._path, '{tmp}'))
+        self._delete_file(os.path.join(self._path, 'install_script.iss'))
 
     def _install_program(self):
         """
@@ -149,7 +166,7 @@ class YoutubeDL_Manager(Base_Profile):
             list: folders absolute path list (or a single absolute path if the folder is only one)
         """
 
-        return self._path
+        return os.path.join(self._path, 'bin')
 
     def _remove_program(self):
         """

@@ -68,12 +68,10 @@ class SubtitleEdit_Manager(Base_Profile):
 
         url = 'https://github.com/SubtitleEdit/subtitleedit/releases/download/{}/SE{}.zip' \
                     .format(self._latest_version, self._latest_version.replace('.', ''))
-        se_latest = dl_get(
+        return dl_get(
                 os.path.join(self._tmp_dir, 'subtitleedit_latest.zip'),
                 url
             )
-
-        return se_latest
 
     def _extract_latest_version(self):
         """
@@ -92,7 +90,10 @@ class SubtitleEdit_Manager(Base_Profile):
             None
         """
 
-        self._extract(self._dl_data_list[0].path, self._path)
+        # Extract program and remove the archive
+        self._extract(self._dl_data_list[0].path)
+        self._delete_file(self._dl_data_list[0].path)
+
 
     def _update_program(self):
         """
@@ -113,8 +114,7 @@ class SubtitleEdit_Manager(Base_Profile):
             None
         """
 
-        # Remove the downloaded file
-        self._delete_file(self._dl_data_list[0].path)
+        pass
 
     def _install_program(self):
         """
@@ -135,7 +135,7 @@ class SubtitleEdit_Manager(Base_Profile):
             None
         """
 
-        self._update_program()
+        pass
 
     def _get_executables(self):
         """

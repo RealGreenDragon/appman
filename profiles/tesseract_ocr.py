@@ -17,16 +17,50 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from ._base import Base_Profile
 from ._utils import *
 
-class YoutubeDL_Manager(Base_Profile):
+class TesseractOCR_Manager(Base_Profile):
 
-    program_name = 'Youtube-DL'
+    program_name = 'Tesseract-OCR'
 
-    default_path = 'C:\\Portable\\youtubedl\\'
+    default_path = 'C:\\Portable\\tesseract_ocr\\'
+
+    # Lang data to install
+    langs = ['eng', 'ita']
 
     # Not touch the method signature and the first row
     def __init__(self, **prog_data):
         super(self.__class__, self).__init__(**prog_data)
         # Here you can add other inits useful for the profile
+        self.tessdata_dir = os.path.join(self.path, 'tessdata')
+        self.tessdata_dir_tmp = os.path.join(self._tmp_dir, 'tessdata')
+
+    def lang_dl(self, dir, lang):
+        base_url = 'https://raw.githubusercontent.com/tesseract-ocr/tessdata/3.04.00/'
+        return [
+            dl_get( os.path.join(dir, '{}.cube.bigrams'.format(lang)), '{}{}.cube.bigrams'.format(base_url, lang), can_fail=True ),
+            dl_get( os.path.join(dir, '{}.cube.fold'.format(lang)), '{}{}.cube.fold'.format(base_url, lang), can_fail=True ),
+            dl_get( os.path.join(dir, '{}.cube.lm'.format(lang)), '{}{}.cube.lm'.format(base_url, lang), can_fail=True ),
+            dl_get( os.path.join(dir, '{}.cube.nn'.format(lang)), '{}{}.cube.nn'.format(base_url, lang), can_fail=True ),
+            dl_get( os.path.join(dir, '{}.cube.params'.format(lang)), '{}{}.cube.params'.format(base_url, lang), can_fail=True ),
+            dl_get( os.path.join(dir, '{}.cube.size'.format(lang)), '{}{}.cube.size'.format(base_url, lang), can_fail=True ),
+            dl_get( os.path.join(dir, '{}.cube.word-freq'.format(lang)), '{}{}.cube.word-freq'.format(base_url, lang), can_fail=True ),
+            dl_get( os.path.join(dir, '{}.tesseract_cube.nn'.format(lang)), '{}{}.tesseract_cube.nn'.format(base_url, lang), can_fail=True ),
+            dl_get( os.path.join(dir, '{}.traineddata'.format(lang)), '{}{}.traineddata'.format(base_url, lang) ) # This file is necessary
+        ]
+
+    def lang_common_dl(self, dir):
+        """
+        Special data files (common to all langs and cross versions)
+
+        osd.traineddata : Orientation and script detection
+        equ.traineddata : Math / equation detection
+
+        Source:
+            https://github.com/tesseract-ocr/tesseract/wiki/Data-Files#special-data-files
+        """
+        return [
+            dl_get( os.path.join(dir, 'osd.traineddata'), 'https://github.com/tesseract-ocr/tessdata/raw/3.04.00/osd.traineddata' ),
+            dl_get( os.path.join(dir, 'equ.traineddata'), 'https://github.com/tesseract-ocr/tessdata/raw/3.04.00/equ.traineddata' )
+        ]
 
     def _get_latest_version(self):
         """
@@ -43,8 +77,8 @@ class YoutubeDL_Manager(Base_Profile):
         Returns:
             str : Latest version
         """
-
-        return self._http_head_req('https://github.com/rg3/youtube-dl/releases/latest').headers['Location'].split('/')[-1]
+        with self._http_head_req('https://github.com/parrot-office/tesseract/releases/latest') as r:
+            return r.headers['Location'].split('/')[-1].strip()
 
     def _get_download_data(self):
         """
@@ -66,11 +100,33 @@ class YoutubeDL_Manager(Base_Profile):
         Returns:
             list: DownloadData objects list (or a single DownloadData object if the download is only one)
         """
-
-        return dl_get(
-                os.path.join(self._path, 'youtube-dl.exe'),
-                'https://github.com/rg3/youtube-dl/releases/download/{}/youtube-dl.exe'.format(self._latest_version)
+        url = 'https://github.com/parrot-office/tesseract/releases/download/{ver}/tesseract-Win{arch}.zip' \
+        .format(
+            ver=self._latest_version,
+            arch=self._arch
             )
+
+        # Tesseract base
+        tessfiles = [
+            dl_get(
+                os.path.join(self._tmp_dir, 'tesseract_ocr_latest.zip'),
+                url
+            )
+        ]
+
+        if self._mode == 'install':
+            # Make tessdata
+            self._make_dir(self.tessdata_dir_tmp)
+
+            # Common files
+            tessfiles += self.lang_common_dl(self.tessdata_dir_tmp)
+
+            # Langs files
+            for l in self.langs:
+                tessfiles += self.lang_dl(self.tessdata_dir_tmp, l)
+
+        return tessfiles
+
 
     def _extract_latest_version(self):
         """
@@ -89,7 +145,8 @@ class YoutubeDL_Manager(Base_Profile):
             None
         """
 
-        pass
+        self._extract(self._dl_data_list[0].path)
+        self._delete_file(self._dl_data_list[0].path)
 
     def _update_program(self):
         """
@@ -130,7 +187,8 @@ class YoutubeDL_Manager(Base_Profile):
             None
         """
 
-        self._update_program()
+        self._copy_dir(self.tessdata_dir_tmp, self.tessdata_dir)
+        self._delete_dir(self.tessdata_dir_tmp)
 
     def _get_executables(self):
         """

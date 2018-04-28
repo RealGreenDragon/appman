@@ -17,11 +17,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from ._base import Base_Profile
 from ._utils import *
 
-class YoutubeDL_Manager(Base_Profile):
+class TeXstudio_Manager(Base_Profile):
 
-    program_name = 'Youtube-DL'
+    program_name = 'TeXstudio'
 
-    default_path = 'C:\\Portable\\youtubedl\\'
+    default_path = 'C:\\Portable\\texstudio\\'
+
+    dependences = set(['miktex'])
 
     # Not touch the method signature and the first row
     def __init__(self, **prog_data):
@@ -43,8 +45,8 @@ class YoutubeDL_Manager(Base_Profile):
         Returns:
             str : Latest version
         """
-
-        return self._http_head_req('https://github.com/rg3/youtube-dl/releases/latest').headers['Location'].split('/')[-1]
+        with self._http_head_req('https://github.com/texstudio-org/texstudio/releases/latest') as r:
+            return r.headers['Location'].split('/')[-1].strip()
 
     def _get_download_data(self):
         """
@@ -68,8 +70,10 @@ class YoutubeDL_Manager(Base_Profile):
         """
 
         return dl_get(
-                os.path.join(self._path, 'youtube-dl.exe'),
-                'https://github.com/rg3/youtube-dl/releases/download/{}/youtube-dl.exe'.format(self._latest_version)
+            os.path.join(self._tmp_dir, 'texstudio_latest.zip'),
+            'https://github.com/texstudio-org/texstudio/releases/download/{ver}/texstudio-{ver}-win-portable-qt5.zip'.format(
+                ver=self._latest_version
+                )
             )
 
     def _extract_latest_version(self):
@@ -89,7 +93,10 @@ class YoutubeDL_Manager(Base_Profile):
             None
         """
 
-        pass
+        self._extract(self._dl_data_list[0].path)
+
+        # Remove the downloaded file
+        self._delete_file(self._dl_data_list[0].path)
 
     def _update_program(self):
         """

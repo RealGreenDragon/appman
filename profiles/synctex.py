@@ -17,11 +17,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from ._base import Base_Profile
 from ._utils import *
 
-class YoutubeDL_Manager(Base_Profile):
+class SyncTeX_Manager(Base_Profile):
 
-    program_name = 'Youtube-DL'
+    program_name = 'SyncTeX'
 
-    default_path = 'C:\\Portable\\youtubedl\\'
+    default_path = 'C:\\Portable\\synctex\\'
 
     # Not touch the method signature and the first row
     def __init__(self, **prog_data):
@@ -44,7 +44,7 @@ class YoutubeDL_Manager(Base_Profile):
             str : Latest version
         """
 
-        return self._http_head_req('https://github.com/rg3/youtube-dl/releases/latest').headers['Location'].split('/')[-1]
+        return '46993.46993'
 
     def _get_download_data(self):
         """
@@ -67,10 +67,26 @@ class YoutubeDL_Manager(Base_Profile):
             list: DownloadData objects list (or a single DownloadData object if the download is only one)
         """
 
-        return dl_get(
-                os.path.join(self._path, 'youtube-dl.exe'),
-                'https://github.com/rg3/youtube-dl/releases/download/{}/youtube-dl.exe'.format(self._latest_version)
+        synctex_rev, kpathsea630_rev = self._latest_version.split('.')
+
+        # SyncTeX is necessary to enable LaTeX viewer in some editors (such as Atom)
+        # - Source:
+        # https://atom.io/packages/atom-latex#requirements
+        # http://tex.stackexchange.com/questions/338078/how-to-get-synctex-for-windows-to-allow-atom-pdf-view-to-synch#comment877274_338117
+        return [
+            dl_get(
+                os.path.join(self._path, 'synctex.exe'),
+                'https://www.tug.org/svn/texlive/trunk/Master/bin/win32/synctex.exe?revision={}&view=co'.format(
+                    synctex_rev
+                    )
+            ),
+            dl_get(
+                os.path.join(self._path, 'kpathsea630.dll'),
+                'https://www.tug.org/svn/texlive/trunk/Master/bin/win32/kpathsea630.dll?revision={}&view=co'.format(
+                    kpathsea630_rev
+                    )
             )
+        ]
 
     def _extract_latest_version(self):
         """
@@ -130,7 +146,7 @@ class YoutubeDL_Manager(Base_Profile):
             None
         """
 
-        self._update_program()
+        pass
 
     def _get_executables(self):
         """

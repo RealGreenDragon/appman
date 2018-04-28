@@ -17,7 +17,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ''' Source code data '''
 __title__           = 'appman'
 __author__          = 'Daniele Giudice'
-__version__         = '0.1.3'
+__version__         = '0.2.0'
 __license__         = 'GNU General Public License v3'
 __copyright__       = 'Copyright 2018 Daniele Giudice'
 __description__     = 'An application manager for Windows'
@@ -59,7 +59,6 @@ class ApplicationManager():
         self._logger = logging.getLogger('appman.wrapper')
 
         # Init vars
-        self._refresh_env_cmd = 'cmd /c RefreshEnv.bat'
         self._db_path = os.path.join(APPMAN_DIR, 'data.json')
         self._db = {
             'dependences': {},
@@ -137,8 +136,7 @@ class ApplicationManager():
             with open(self._db_path_tmp, 'w', encoding='UTF-8') as f:
                 json.dump(self._db, f, indent=4, sort_keys=True)
             self._logger.debug('Replacing old ProgDB with the updated version')
-            if os.path.exists(self._db_path):
-                os.remove(self._db_path)
+            os.remove(self._db_path)
             os.rename(self._db_path_tmp, self._db_path)
         except (IOError, OSError) as ex:
             raise ProgramDBException('Cannot open ProgDB for writing')
@@ -152,14 +150,6 @@ class ApplicationManager():
             elif not prog_name in self._db['dependences'][dep]:
                 self._db['dependences'][dep].append(prog_name)
                 sorted(self._db['dependences'][dep])
-
-    def _refresh_env(self):
-        # Try to refresh Environmental Variables in the actual shell
-        try:
-            with open(os.devnull, 'w') as devnull:
-                subprocess.run(self._refresh_env_cmd, stdout=devnull, stderr=devnull, shell=True, check=True)
-        except subprocess.CalledProcessError:
-            print('WARNING: Cannot Refresh Environmental Variables (restart the shell to see the changes).')
 
     @property
     def installed_programs(self):
@@ -206,7 +196,7 @@ class ApplicationManager():
     def path(self):
         return self._db_path
 
-    def install(self, prog_name):
+    def install(self, prog_name, prev_dip=[]):
         if prog_name in self._db['installed']:
             print('"{}" v{} is already installed'.format(
                 prog_name,
@@ -221,9 +211,14 @@ class ApplicationManager():
         # Check that all dependences are satisfied (install them if needed)
         if dependences:
             print('Checking "{}" dependences ...'.format(prog_name))
+            next_dep = prev_dip + list(dependences) + [prog_name]
             for dep in dependences:
+                # Check for circular dependences
+                if dep in prev_dip:
+                    raise ImplementationError('Circular dependences detected -> {}'.format(dep))
+                # Check dependence status
                 try:
-                    self.install(dep)
+                    self.install(dep, prev_dip=next_dep)
                 except Exception as ex:
                     traceback.print_exc()
                     print('Cannot install "{}" due a problem with the dependence "{}"'.format(prog_name, dep))
@@ -233,28 +228,17 @@ class ApplicationManager():
         res = p.install()
         self._logger.debug('Install return value -> {}'.format(res))
 
-        try:
-            if res[0]:
-                # If the install succeed, update the DB
-                self._logger.debug('Updating {} DB record ...'.format(prog_name))
-                self._db['installed'].update(p.prog_data)
-                self._add_dependences(prog_name, dependences)
+        # If no action is needed, exit
+        if not res[0]:
+            self._logger.debug('{} version not changed'.format(prog_name))
+            return False
 
-                # Update DB and cleanup
-                self._write_json()
-                del p
-
-                # Try to refresh Environmental Variables in the actual shell
-                self._refresh_env()
-
-                # Exit
-                return True
-            else:
-                del p
-                return False
-        except Exception as ex:
-            del p
-            raise ex
+        # If the install succeed, update ProgDB
+        self._logger.debug('Updating {} DB record ...'.format(prog_name))
+        self._db['installed'].update(p.prog_data)
+        self._add_dependences(prog_name, dependences)
+        self._write_json()
+        return True
 
     def update(self, prog_name):
         if not prog_name in self._db['installed']:
@@ -268,25 +252,16 @@ class ApplicationManager():
         res = p.update()
         self._logger.debug('Update return value -> {}'.format(res))
 
-        try:
-            if res[0]:
-                # If the update succeed, update the DB
-                self._logger.debug('Updating {} DB record ...'.format(prog_name))
-                self._db['installed'].update(p.prog_data)
+        # If no action is needed, exit
+        if not res[0]:
+            self._logger.debug('{} version not changed'.format(prog_name))
+            return False
 
-                # Update DB and cleanup
-                self._write_json()
-                del p
-
-                # Exit
-                return True
-            else:
-                self._logger.debug('Version not changed, so {} DB record not updated'.format(prog_name))
-                del p
-                return False
-        except Exception as ex:
-            del p
-            raise ex
+        # If the update succeed, update the ProgDB
+        self._logger.debug('Updating {} DB record ...'.format(prog_name))
+        self._db['installed'].update(p.prog_data)
+        self._write_json()
+        return True
 
     def remove(self, prog_name):
         if not prog_name in self._db['installed']:
@@ -311,37 +286,26 @@ class ApplicationManager():
         res = p.remove()
         self._logger.debug('Remove return value -> {}'.format(res))
 
-        try:
-            if res[0]:
-                # If the remove succeed, update the DB
-                self._logger.debug('Updating {} DB record ...'.format(prog_name))
+        # If no action is needed, exit
+        if not res[0]:
+            return False
 
-                # Remove the program from installed
-                self._db['installed'].pop(prog_name, None)
-                self._db['dependences'].pop(prog_name, None)
+        self._logger.debug('Updating {} ProgDB ...'.format(prog_name))
 
-                # Remove the program from dependences lists
-                for dep in self._db['dependences']:
-                    try:
-                        self._db['dependences'][dep].remove(prog_name)
-                    except (TypeError, ValueError, KeyError):
-                        pass
+        # Remove the program from installed
+        self._db['installed'].pop(prog_name, None)
+        self._db['dependences'].pop(prog_name, None)
 
-                # Update DB and cleanup
-                self._write_json()
-                del p
+        # Remove the program from dependences lists
+        for dep in self._db['dependences']:
+            try:
+                self._db['dependences'][dep].remove(prog_name)
+            except (TypeError, ValueError, KeyError):
+                pass
 
-                # Try to refresh Environmental Variables in the actual shell
-                self._refresh_env()
-
-                # Exit
-                return True
-            else:
-                del p
-                return False
-        except Exception as ex:
-            del p
-            raise ex
+        # Update ProgDB
+        self._write_json()
+        return True
 
 
 ''' AppMan Main Functions '''
@@ -396,6 +360,14 @@ def appman_init():
     # Parse args
     args = vars(parser.parse_args())
 
+    # Check if Microsoft C Runtime 2015 is installed
+    try:
+        res = subprocess.run("where ucrtbase.dll", stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        assert( len(res.stdout.splitlines()) > 0 )
+    except Exception:
+        print("Error: Microsoft C Runtime 2015 not installed.\nYou can download it from:\nhttps://www.microsoft.com/en-us/download/details.aspx?id=48145")
+        return (None, None, None)
+
     # Check that the running OS is Windows Vista or upper
     if winvers.get_version() >= winvers.WIN_VISTA:
         if args['mode'] in ('install', 'remove'):
@@ -404,11 +376,14 @@ def appman_init():
                 # This check works only  if "winvers.get_version() >= winvers.WIN_XP_SP2"
                 import ctypes
                 if not ctypes.windll.shell32.IsUserAnAdmin():
-                    parser.error('"{}" mode requires admin privileges'.format(args['mode']))
+                    print('Error: "{}" mode requires admin privileges'.format(args['mode']))
+                    return (None, None, None)
             except Exception:
-                parser.error('Windows OS detected, but admin check failed')
+                print('Error: Windows OS detected, but admin check failed')
+                return (None, None, None)
     else:
-        parser.error('This program works only on Windows Vista or newer')
+        print('Error: This program works only on Windows Vista or newer')
+        return (None, None, None)
 
     # If in listing mode, no programs can be specified
     if args['mode'] in ('available', 'installed') and args['programs']:
