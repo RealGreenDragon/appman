@@ -67,8 +67,8 @@ class Pandoc_Manager(Base_Profile):
             list: DownloadData objects list (or a single DownloadData object if the download is only one)
         """
 
-        url = 'https://github.com/jgm/pandoc/releases/download/{ver}/pandoc-{ver}-windows.zip' \
-        .format(ver=self._latest_version)
+        url = 'https://github.com/jgm/pandoc/releases/download/{ver}/pandoc-{ver}-windows-{arch}.zip' \
+        .format(ver=self._latest_version, arch='i386' if self._arch == '32' else 'x86_64')
         return dl_get(
                 os.path.join(self._tmp_dir, 'pandoc_latest.zip'),
                 url
