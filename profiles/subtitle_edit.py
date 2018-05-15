@@ -135,7 +135,9 @@ class SubtitleEdit_Manager(Base_Profile):
             None
         """
 
-        pass
+        self._update_program()
+
+        self._make_desktop_shortcut(os.path.join(self._path, 'SubtitleEdit.exe'), self.program_name)
 
     def _get_executables(self):
         """
@@ -173,4 +175,4 @@ class SubtitleEdit_Manager(Base_Profile):
             None
         """
 
-        pass
+        self._delete_desktop_shortcut(self.program_name)
