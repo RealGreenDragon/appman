@@ -17,7 +17,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ''' Source code data '''
 __title__           = 'appman'
 __author__          = 'Daniele Giudice'
-__version__         = '0.2.0'
+__version__         = '2018.05.31'
 __license__         = 'GNU General Public License v3'
 __copyright__       = 'Copyright 2018 Daniele Giudice'
 __description__     = 'An application manager for Windows'

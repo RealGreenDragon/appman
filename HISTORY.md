@@ -11,3 +11,5 @@
     - New profiles added
     - Other new features
     - Various issues fixed
+- 2018.05.31
+    - 7zip updated to v18.05
