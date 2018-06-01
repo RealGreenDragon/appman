@@ -44,7 +44,10 @@ class MKVToolNix_Manager(Base_Profile):
             str : Latest version
         """
 
-        return self._http_get_req('https://mkvtoolnix.download/doc/NEWS.md').split('# Version ')[1].split(' "')[0].strip()
+        news = self._http_get_req('https://gitlab.com/mbunkus/mkvtoolnix/raw/master/NEWS.md')
+        if '# Version ?' in news:
+            news = news.split('# Version ?')[1]
+        return news.split('# Version ')[1].split(' "')[0].strip()
 
     def _get_download_data(self):
         """
