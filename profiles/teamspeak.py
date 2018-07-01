@@ -45,7 +45,7 @@ class TeamSpeak_Manager(Base_Profile):
         Returns:
             str : Latest version
         """
-        dl_html = self._http_get_req('https://www.teamspeak.com/en/downloads.html').split('<div class="platform windows">')[1]
+        dl_html = self._http_get_req('https://www.teamspeak.com/en/downloads.html').split('<div class="platform mb-5 windows">')[1]
         latest_version = dl_html.split('<span class="version">')[1].split('</span>')[0].strip()
         # Parse latest version link and fix the architecture version
         self.dl_url = dl_html.split('<option value="')[1].split('">')[0].strip()
